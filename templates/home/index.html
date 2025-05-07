@@ -1,0 +1,726 @@
+{% extends 'base.html' %} 
+{% block title %} Product Data Import System - Home {% endblock %} 
+{% block extra_css %}
+<style>
+    .hero-section {
+        background-color: #f8f9fa;
+        padding: 3rem 0;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+    }
+
+    .upload-section {
+        background-color: white;
+        border-radius: 8px;
+        padding: 2rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-bottom: 2rem;
+    }
+
+    .stats-container {
+        margin-top: 3rem;
+    }
+
+    .import-history {
+        margin-top: 3rem;
+    }
+
+    .card-icon {
+        font-size: 2rem;
+        margin-bottom: 0.5rem;
+        color: #0d6efd;
+    }
+
+    .feature-card {
+        height: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .progress-container {
+        display: none;
+        margin: 2rem 0;
+    }
+
+    .file-info {
+        display: none;
+        margin-top: 1rem;
+    }
+
+    .analytics-filters {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+
+    .filter-badge {
+        margin-right: 0.5rem;
+        cursor: pointer;
+    }
+
+    .filter-badge i {
+        margin-left: 0.3rem;
+    }
+</style>
+{% endblock %} 
+
+{% block content %}
+<div class="hero-section text-center">
+    <h1 class="display-4">Product Data Import System</h1>
+    <p class="lead">
+        Upload, validate, and process Excel files containing product data
+        efficiently
+    </p>
+</div>
+
+<div class="upload-section">
+    <h2 class="mb-4">Import Product Data</h2>
+    <form method="post" enctype="multipart/form-data" id="upload-form">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="excelFile" class="form-label">Select Excel File</label>
+            <div class="input-group">
+                <input
+                    type="file"
+                    class="form-control"
+                    id="excelFile"
+                    name="file"
+                    accept=".xlsx, .xls"
+                    required
+                />
+                <button class="btn btn-primary" type="submit" id="uploadBtn">
+                    <i class="fas fa-upload me-2"></i> Upload & Process
+                </button>
+            </div>
+            <div class="form-text">
+                Only Excel files (.xlsx, .xls) are supported. Maximum file size:
+                10MB
+            </div>
+        </div>
+    </form>
+
+    <div class="file-info alert alert-info" id="fileInfo">
+        <div class="d-flex align-items-center">
+            <i class="fas fa-file-excel me-2"></i>
+            <div>
+                <strong>Selected file:</strong>
+                <span id="fileName">filename.xlsx</span><br />
+                <span id="fileSize">0 KB</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="progress-container" id="progressContainer">
+        <h5>Processing data...</h5>
+        <div class="progress" style="height: 20px">
+            <div
+                class="progress-bar progress-bar-striped progress-bar-animated"
+                role="progressbar"
+                style="width: 0%"
+                id="progressBar"
+            >
+                0%
+            </div>
+        </div>
+        <p class="text-center mt-2" id="progressStatus">Validating file...</p>
+    </div>
+</div>
+
+<div class="stats-container">
+    <h2 class="mb-4">Import Statistics</h2>
+    <div class="row">
+        <div class="col-md-3 mb-4">
+            <div class="card stats-card text-center h-100">
+                <div class="card-body">
+                    <i class="fas fa-file-import card-icon"></i>
+                    <h5 class="card-title">Total Imports</h5>
+                    <p class="card-text display-6" id="totalImports">
+                        {{ total_imports|default:"0" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card stats-card text-center h-100">
+                <div class="card-body">
+                    <i class="fas fa-check-circle card-icon text-success"></i>
+                    <h5 class="card-title">Successful Rows</h5>
+                    <p class="card-text display-6" id="successfulRows">
+                        {{ successful_rows|default:"0" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card stats-card text-center h-100">
+                <div class="card-body">
+                    <i
+                        class="fas fa-exclamation-triangle card-icon text-warning"
+                    ></i>
+                    <h5 class="card-title">Warnings</h5>
+                    <p class="card-text display-6" id="warningCount">
+                        {{ warning_count|default:"0" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4">
+            <div class="card stats-card text-center h-100">
+                <div class="card-body">
+                    <i class="fas fa-times-circle card-icon text-danger"></i>
+                    <h5 class="card-title">Failed Rows</h5>
+                    <p class="card-text display-6" id="failedRows">
+                        {{ failed_rows|default:"0" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <h2 class="mb-4">Key Features</h2>
+    <div class="col-lg-4 mb-4">
+        <div class="card feature-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-shield-alt me-2 text-primary"></i>Robust
+                    Validation
+                </h5>
+                <p class="card-text">
+                    Comprehensive validation checks ensure data integrity.
+                    System identifies missing required fields and highlights
+                    warnings.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card feature-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-database me-2 text-primary"></i>Efficient
+                    Processing
+                </h5>
+                <p class="card-text">
+                    Chunk-based processing handles large data files efficiently.
+                    Memory usage remains optimized even with thousands of rows.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card feature-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="fas fa-chart-bar me-2 text-primary"></i>Detailed
+                    Analytics
+                </h5>
+                <p class="card-text">
+                    Comprehensive logs and statistics for each import operation.
+                    Track successes, warnings, and errors with precise details.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="import-history">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Recent Import Logs</h2>
+        <div>
+            <button id="refreshLogsBtn" class="btn btn-outline-secondary btn-sm me-2">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <a href="/api/analytics/" class="btn btn-outline-primary btn-sm">View All Analytics</a>
+            <a href="/api/logs/" class="btn btn-outline-info btn-sm ms-2">View All Logs</a>
+        </div>
+    </div>
+
+    <!-- Simple filtering options -->
+    <div class="analytics-filters">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <select class="form-select form-select-sm" id="statusFilter">
+                    <option value="">All Statuses</option>
+                    <option value="processing">Processing</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" id="filenameFilter" placeholder="Filter by filename">
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-sm btn-outline-primary" id="applyFiltersBtn">Apply Filters</button>
+                <button class="btn btn-sm btn-outline-secondary" id="clearFiltersBtn">Clear</button>
+            </div>
+        </div>
+        <div class="mt-2" id="activeFilters">
+            <!-- Active filters will be displayed here -->
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover" id="importsTable">
+            <thead>
+                <tr>
+                    <th>Import ID</th>
+                    <th>Filename</th>
+                    <th>Date</th>
+                    <th>Total Rows</th>
+                    <th>Success</th>
+                    <th>Warnings</th>
+                    <th>Failures</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td colspan="9" class="text-center">
+                        Loading import logs...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        <div id="pagination" class="d-flex justify-content-center mt-3">
+            <button class="btn btn-sm btn-outline-secondary me-2" id="prevPage" disabled>Previous</button>
+            <span class="align-self-center me-2" id="pageInfo">Page 1</span>
+            <button class="btn btn-sm btn-outline-secondary" id="nextPage">Next</button>
+        </div>
+    </div>
+
+    <div class="mt-4">
+        <h4>Recent System Logs</h4>
+        <div class="table-responsive">
+            <table class="table table-sm" id="logsTable">
+                <thead>
+                    <tr>
+                        <th>Level</th>
+                        <th>Task</th>
+                        <th>Message</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td colspan="4" class="text-center">Loading logs...</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="text-center">
+                <a href="/api/logs/" class="btn btn-sm btn-outline-secondary">View All Logs</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %} 
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        const $uploadForm = $('#upload-form');
+        const $fileInput = $('#excelFile');
+        const $fileInfo = $('#fileInfo');
+        const $fileName = $('#fileName');
+        const $fileSize = $('#fileSize');
+        const $progressContainer = $('#progressContainer');
+        const $progressBar = $('#progressBar');
+        const $progressStatus = $('#progressStatus');
+        const $uploadBtn = $('#uploadBtn');
+        
+        // Pagination variables
+        let currentPage = 1;
+        let totalPages = 1;
+        
+        // Load initial data
+        loadAnalyticsData();
+        loadRecentLogs();
+        loadStatistics();
+
+        // Show file information when a file is selected
+        $fileInput.on('change', function() {
+            if (this.files && this.files[0]) {
+                const file = this.files[0];
+                $fileName.text(file.name);
+
+                // Format file size
+                let size = file.size;
+                let sizeDisplay = '';
+                if (size < 1024) {
+                    sizeDisplay = size + ' bytes';
+                } else if (size < 1024 * 1024) {
+                    sizeDisplay = (size / 1024).toFixed(2) + ' KB';
+                } else {
+                    sizeDisplay = (size / (1024 * 1024)).toFixed(2) + ' MB';
+                }
+
+                $fileSize.text(sizeDisplay);
+                $fileInfo.show();
+            } else {
+                $fileInfo.hide();
+            }
+        });
+
+        // Handle form submission
+        $uploadForm.on('submit', function(e) {
+            e.preventDefault();
+
+            if (!$fileInput[0].files || !$fileInput[0].files[0]) {
+                alert('Please select a file to upload');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', $fileInput[0].files[0]);
+
+            // Show progress container
+            $progressContainer.show();
+            $uploadBtn.prop('disabled', true);
+            $fileInput.prop('disabled', true);
+
+            // Update progress for better user experience
+            let progress = 0;
+            const progressInterval = setInterval(function() {
+                // Simulate progress until we get real updates
+                if (progress < 90) {
+                    progress += Math.random() * 10;
+                    progress = Math.min(progress, 90);
+                    $progressBar.css('width', progress + '%');
+                    $progressBar.text(Math.round(progress) + '%');
+
+                    if (progress < 30) {
+                        $progressStatus.text('Validating file...');
+                    } else if (progress < 60) {
+                        $progressStatus.text('Processing data...');
+                    } else {
+                        $progressStatus.text('Saving records...');
+                    }
+                }
+            }, 500);
+
+            // Send the file to the API
+            $.ajax({
+                url: '/api/upload/',
+                type: 'POST',
+                data: formData,
+                processData: false,  // tell jQuery not to process the data
+                contentType: false,  // tell jQuery not to set contentType
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                success: function(data) {
+                    // Upload completed successfully
+                    clearInterval(progressInterval);
+                    $progressBar.css('width', '100%');
+                    $progressBar.text('100%');
+                    $progressStatus.text('Import completed!');
+                    $progressBar.removeClass('progress-bar-animated');
+                    $progressBar.addClass('bg-success');
+
+                    // Refresh data
+                    setTimeout(function() {
+                        loadAnalyticsData();
+                        loadRecentLogs();
+                        loadStatistics();
+                        
+                        // Reset form
+                        $uploadBtn.prop('disabled', false);
+                        $fileInput.prop('disabled', false);
+                        $fileInput.val('');
+                        $fileInfo.hide();
+                        
+                        // Hide progress after a while
+                        setTimeout(function() {
+                            $progressContainer.fadeOut();
+                            $progressBar.removeClass('bg-success');
+                            $progressBar.addClass('progress-bar-animated');
+                        }, 3000);
+                        
+                    }, 1000);
+                },
+                error: function(xhr, status, error) {
+                    // Handle errors
+                    clearInterval(progressInterval);
+                    $progressBar.removeClass('progress-bar-animated');
+                    $progressBar.addClass('bg-danger');
+                    $progressStatus.text('Error: ' + (xhr.responseJSON?.message || error || 'Unknown error'));
+
+                    // Re-enable form after 3 seconds
+                    setTimeout(function() {
+                        $uploadBtn.prop('disabled', false);
+                        $fileInput.prop('disabled', false);
+                    }, 3000);
+                }
+            });
+        });
+        
+        // Event handlers for table filters
+        $('#applyFiltersBtn').on('click', function() {
+            loadAnalyticsData();
+        });
+        
+        $('#clearFiltersBtn').on('click', function() {
+            $('#statusFilter').val('');
+            $('#filenameFilter').val('');
+            loadAnalyticsData();
+        });
+        
+        $('#refreshLogsBtn').on('click', function() {
+            loadAnalyticsData();
+            loadRecentLogs();
+            loadStatistics();
+        });
+        
+        // Pagination handlers
+        $('#prevPage').on('click', function() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadAnalyticsData();
+            }
+        });
+        
+        $('#nextPage').on('click', function() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadAnalyticsData();
+            }
+        });
+
+        // Function to load analytics data from API
+        function loadAnalyticsData() {
+            let params = {};
+            
+            // Add filters if set
+            const statusFilter = $('#statusFilter').val();
+            if (statusFilter) {
+                params.status = statusFilter;
+            }
+            
+            const filenameFilter = $('#filenameFilter').val();
+            if (filenameFilter) {
+                params.file_name = filenameFilter;
+            }
+            
+            // Add page number
+            params.page = currentPage;
+            
+            // Show loading indicator
+            $('#importsTable tbody').html('<tr><td colspan="9" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading data...</td></tr>');
+            
+            // Display active filters
+            updateActiveFilters();
+            
+            $.ajax({
+                url: '/api/analytics/',
+                type: 'GET',
+                data: params,
+                success: function(data) {
+                    // Update table with analytics data
+                    updateAnalyticsTable(data);
+                    
+                    // Update pagination
+                    totalPages = Math.ceil(data.length > 0 ? data.length / 10 : 1); // Assuming 10 items per page
+                    updatePagination();
+                },
+                error: function() {
+                    $('#importsTable tbody').html('<tr><td colspan="9" class="text-center text-danger">Error loading data. Please try again.</td></tr>');
+                }
+            });
+        }
+        
+        // Function to load recent logs
+        function loadRecentLogs() {
+            $.ajax({
+                url: '/api/logs/',
+                type: 'GET',
+                data: {
+                    page: 1,
+                    page_size: 5  // Only fetch 5 most recent logs
+                },
+                success: function(data) {
+                    updateLogsTable(data);
+                },
+                error: function() {
+                    $('#logsTable tbody').html('<tr><td colspan="4" class="text-center text-danger">Error loading logs</td></tr>');
+                }
+            });
+        }
+        
+        // Function to load statistics summary
+        function loadStatistics() {
+            $.ajax({
+                url: '/api/analytics/',
+                type: 'GET',
+                success: function(data) {
+                    // Calculate statistics from analytics data
+                    let totalImports = data.length;
+                    let successfulRows = 0;
+                    let warningCount = 0;
+                    let failedRows = 0;
+                    
+                    data.forEach(function(item) {
+                        successfulRows += item.success_count || 0;
+                        warningCount += item.warning_count || 0;
+                        failedRows += item.failure_count || 0;
+                    });
+                    
+                    // Update statistics on page
+                    $('#totalImports').text(totalImports);
+                    $('#successfulRows').text(successfulRows);
+                    $('#warningCount').text(warningCount);
+                    $('#failedRows').text(failedRows);
+                }
+            });
+        }
+        
+        // Function to update the analytics table
+        function updateAnalyticsTable(data) {
+            let tableHtml = '';
+            
+            if (data.length === 0) {
+                tableHtml = '<tr><td colspan="9" class="text-center">No import logs found. Upload an Excel file to get started.</td></tr>';
+            } else {
+                data.forEach(function(item) {
+                    let statusBadge = '';
+                    if (item.status === 'completed') {
+                        statusBadge = '<span class="badge bg-success">Completed</span>';
+                    } else if (item.status === 'processing') {
+                        statusBadge = '<span class="badge bg-warning">Processing</span>';
+                    } else if (item.status === 'failed') {
+                        statusBadge = '<span class="badge bg-danger">Failed</span>';
+                    }
+                    
+                    // Format date if needed
+                    const startDate = new Date(item.start_time);
+                    const formattedDate = startDate.toLocaleString();
+                    
+                    tableHtml += `
+                    <tr>
+                        <td>${item.id}</td>
+                        <td>${item.file_name}</td>
+                        <td>${formattedDate}</td>
+                        <td>${item.total_records}</td>
+                        <td>${item.success_count}</td>
+                        <td>${item.warning_count}</td>
+                        <td>${item.failure_count}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="/api/analytics/${item.id}/" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="View Details">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    `;
+                });
+            }
+            
+            $('#importsTable tbody').html(tableHtml);
+            // Reinitialize tooltips
+            $('[data-bs-toggle="tooltip"]').tooltip();
+        }
+        
+        // Function to update the logs table
+        function updateLogsTable(data) {
+            let tableHtml = '';
+            
+            if (data.length === 0) {
+                tableHtml = '<tr><td colspan="4" class="text-center">No logs found.</td></tr>';
+            } else {
+                data.forEach(function(log) {
+                    let levelBadge = '';
+                    switch (log.level) {
+                        case 'INFO':
+                            levelBadge = '<span class="badge bg-info">INFO</span>';
+                            break;
+                        case 'WARNING':
+                            levelBadge = '<span class="badge bg-warning">WARNING</span>';
+                            break;
+                        case 'ERROR':
+                            levelBadge = '<span class="badge bg-danger">ERROR</span>';
+                            break;
+                        case 'DEBUG':
+                            levelBadge = '<span class="badge bg-secondary">DEBUG</span>';
+                            break;
+                        default:
+                            levelBadge = `<span class="badge bg-primary">${log.level}</span>`;
+                    }
+                    
+                    tableHtml += `
+                    <tr>
+                        <td>${levelBadge}</td>
+                        <td>${log.task_name}</td>
+                        <td>${log.message}</td>
+                        <td>${new Date(log.created_at).toLocaleString()}</td>
+                    </tr>
+                    `;
+                });
+            }
+            
+            $('#logsTable tbody').html(tableHtml);
+        }
+        
+        // Function to update pagination controls
+        function updatePagination() {
+            $('#pageInfo').text(`Page ${currentPage} of ${totalPages}`);
+            $('#prevPage').prop('disabled', currentPage <= 1);
+            $('#nextPage').prop('disabled', currentPage >= totalPages);
+        }
+        
+        // Function to update active filters display
+        function updateActiveFilters() {
+            let filtersHtml = '';
+            
+            const statusFilter = $('#statusFilter').val();
+            const filenameFilter = $('#filenameFilter').val();
+            
+            if (statusFilter) {
+                filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="status">Status: ${statusFilter} <i class="fas fa-times"></i></span>`;
+            }
+            
+            if (filenameFilter) {
+                filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="filename">Filename: ${filenameFilter} <i class="fas fa-times"></i></span>`;
+            }
+            
+            $('#activeFilters').html(filtersHtml);
+            
+            // Add click handler to remove filters
+            $('.filter-badge').on('click', function() {
+                const filter = $(this).data('filter');
+                if (filter === 'status') {
+                    $('#statusFilter').val('');
+                } else if (filter === 'filename') {
+                    $('#filenameFilter').val('');
+                }
+                loadAnalyticsData();
+            });
+        }
+
+        // Function to get CSRF token from cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = jQuery.trim(cookies[i]);
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Initialize tooltips for the action buttons
+        $('[data-bs-toggle="tooltip"]').tooltip();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,7 @@
+env/
+.env
+core/__pycache__/
+excel_importer/__pycache__/
+data/
+media/
+db.sqlite3
