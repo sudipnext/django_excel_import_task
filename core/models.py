@@ -19,6 +19,9 @@ class Logs(models.Model):
     def __str__(self):
         return f"{self.level} - {self.message} - {self.task_name}"
 
+    class Meta:
+        verbose_name = 'Log'
+        verbose_name_plural = 'Logs'
 
 class Product(models.Model):
     AVAILABILITY_CHOICES = [
@@ -76,6 +79,11 @@ class Product(models.Model):
 
     def __str__(self):
         return self.title
+    
+    class Meta:
+        verbose_name = 'Product'
+        verbose_name_plural = 'Products'
+        
 
 class ImportAnalytics(models.Model):
     file_name = models.CharField(max_length=255)
@@ -92,3 +100,7 @@ class ImportAnalytics(models.Model):
 
     def __str__(self):
         return f"Import {self.id} - {self.file_name}"
+
+    class Meta:
+        verbose_name = 'Import Analytics'
+        verbose_name_plural = 'Import Analytics'

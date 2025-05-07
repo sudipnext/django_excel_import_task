@@ -92,10 +92,36 @@ def process_excel_data(file_path):
                     cleaned_data['product_id'] = cleaned_data.pop('id')
 
                 if 'shipping(country:price)' in cleaned_data:
-                    cleaned_data['shipping'] = cleaned_data.pop('shipping')
+                    cleaned_data['shipping'] = cleaned_data.pop('shipping(country:price)')
                 if 'Model' in cleaned_data:
                     cleaned_data['model'] = cleaned_data.pop('Model')
-                
+                print("cleaned_data", cleaned_data['price'])
+                print("cleaned_data", cleaned_data['sale_price'])
+                print("All keys are ", cleaned_data.keys())
+                if 'price' in cleaned_data:
+                    # Store the original string value containing price and currency
+                    price_str = str(cleaned_data['price'])
+                    if ' ' in price_str:  # Check if it has space to split
+                        parts = price_str.split()
+                        cleaned_data['price'] = float(parts[0])
+                        cleaned_data['currency'] = parts[1] if len(parts) > 1 else ''
+                    else:
+                        # Handle case where it's just a number without currency
+                        cleaned_data['price'] = float(price_str)
+                        cleaned_data['currency'] = ''  # Default currency
+                        
+                if 'sale_price' in cleaned_data and cleaned_data['sale_price']:
+                    # Similar handling for sale_price
+                    sale_price_str = str(cleaned_data['sale_price'])
+                    if ' ' in sale_price_str:  # Check if it has space to split
+                        parts = sale_price_str.split()
+                        cleaned_data['sale_price'] = float(parts[0])
+                        cleaned_data['sale_price_currency'] = parts[1] if len(parts) > 1 else ''
+                    else:
+                        # Handle case where it's just a number without currency
+                        cleaned_data['sale_price'] = float(sale_price_str)
+                        cleaned_data['sale_price_currency'] = ''  # Default currency
+                        
                 # Validate with serializer but don't save yet
                 serializer = ProductSerializer(data=cleaned_data)
                 if serializer.is_valid():

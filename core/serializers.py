@@ -18,58 +18,7 @@ class ProductSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("is_bundle must be 'yes' or 'no'")
         return value
 
-
-    def validate_price(self, value):
-        if not value:
-            return value
-            
-        # If value is already a Decimal, return it
-        if isinstance(value, Decimal):
-            return value
-            
-        # Handle string format "123.45 EUR"
-        if isinstance(value, str):
-            price_pattern = r'^(\d+(?:\.\d{1,2})?)\s([A-Z]{3})$'
-            match = re.match(price_pattern, value)
-            
-            if not match:
-                raise serializers.ValidationError(f"Price '{value}' must be in format '123.45 EUR'")
-                
-            amount_str, currency = match.groups()
-            
-            # Store the currency separately to be used in the create/update method
-            self.context['currency'] = currency
-            
-            # Return just the decimal amount
-            return Decimal(amount_str)
-            
-        return value
-
-    def validate_sale_price(self, value):
-        if not value:
-            return value
-            
-        # If value is already a Decimal or None, return it
-        if isinstance(value, Decimal) or value is None:
-            return value
-            
-        # Handle string format "123.45 EUR"
-        if isinstance(value, str):
-            price_pattern = r'^(\d+(?:\.\d{1,2})?)\s([A-Z]{3})$'
-            match = re.match(price_pattern, value)
-            
-            if not match:
-                raise serializers.ValidationError(f"Sale price '{value}' must be in format '123.45 EUR'")
-                
-            amount_str, currency = match.groups()
-            
-            # Store the sale price currency separately
-            self.context['sale_price_currency'] = currency
-            
-            # Return just the decimal amount
-            return Decimal(amount_str)
-            
-        return value
+    
     def validate_shipping(self, value):
         shipping_pattern = r'^[A-Z]{2}:\d+(\.\d{1,2})?\s[A-Z]{3}$'
         if not re.match(shipping_pattern, value):

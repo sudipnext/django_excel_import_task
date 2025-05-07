@@ -5,3 +5,4 @@ excel_importer/__pycache__/
 data/
 media/
 db.sqlite3
+*.csv
