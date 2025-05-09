@@ -129,6 +129,19 @@
         </div>
         <p class="text-center mt-2" id="progressStatus">Validating file...</p>
     </div>
+
+    <div class="task-details mt-3 mb-2" id="taskDetails" style="display: none;">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-subtitle mb-2 text-muted">Task Details</h6>
+                <p id="taskStatusDetails">Processing task...</p>
+                <div class="d-flex justify-content-between">
+                    <small id="taskId"></small>
+                    <small id="taskElapsedTime">00:00</small>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="stats-container">
@@ -364,6 +377,12 @@
         const $progressBar = $('#progressBar');
         const $progressStatus = $('#progressStatus');
         const $uploadBtn = $('#uploadBtn');
+        const $taskDetails = $('#taskDetails');
+        const $taskStatusDetails = $('#taskStatusDetails');
+        const $taskId = $('#taskId');
+        const $taskElapsedTime = $('#taskElapsedTime');
+        let taskStartTime = null;
+        let taskElapsedTimer = null;
         
         // Pagination variables
         let currentPage = 1;
@@ -448,34 +467,41 @@
                     'X-CSRFToken': getCookie('csrftoken')
                 },
                 success: function(data) {
-                    // Upload completed successfully
-                    clearInterval(progressInterval);
-                    $progressBar.css('width', '100%');
-                    $progressBar.text('100%');
-                    $progressStatus.text('Import completed!');
-                    $progressBar.removeClass('progress-bar-animated');
-                    $progressBar.addClass('bg-success');
+                    // Store the task_id for status polling
+                    if (data.task_id) {
+                        // Start polling for task status
+                        $progressStatus.text('Processing in background...');
+                        pollTaskStatus(data.task_id);
+                    } else {
+                        // No task ID was returned - handle as before
+                        clearInterval(progressInterval);
+                        $progressBar.css('width', '100%');
+                        $progressBar.text('100%');
+                        $progressStatus.text('Import completed!');
+                        $progressBar.removeClass('progress-bar-animated');
+                        $progressBar.addClass('bg-success');
 
-                    // Refresh data
-                    setTimeout(function() {
-                        loadAnalyticsData();
-                        loadRecentLogs();
-                        loadStatistics();
-                        
-                        // Reset form
-                        $uploadBtn.prop('disabled', false);
-                        $fileInput.prop('disabled', false);
-                        $fileInput.val('');
-                        $fileInfo.hide();
-                        
-                        // Hide progress after a while
+                        // Refresh data
                         setTimeout(function() {
-                            $progressContainer.fadeOut();
-                            $progressBar.removeClass('bg-success');
-                            $progressBar.addClass('progress-bar-animated');
-                        }, 3000);
-                        
-                    }, 1000);
+                            loadAnalyticsData();
+                            loadRecentLogs();
+                            loadStatistics();
+                            
+                            // Reset form
+                            $uploadBtn.prop('disabled', false);
+                            $fileInput.prop('disabled', false);
+                            $fileInput.val('');
+                            $fileInfo.hide();
+                            
+                            // Hide progress after a while
+                            setTimeout(function() {
+                                $progressContainer.fadeOut();
+                                $progressBar.removeClass('bg-success');
+                                $progressBar.addClass('progress-bar-animated');
+                            }, 3000);
+                            
+                        }, 1000);
+                    }
                 },
                 error: function(xhr, status, error) {
                     // Handle errors
@@ -836,6 +862,124 @@
                 }
             }
             return cookieValue;
+        }
+
+        // Function to poll task status
+        function pollTaskStatus(taskId) {
+            // Show task details section
+            $taskDetails.show();
+            $taskId.text(`Task ID: ${taskId}`);
+            
+            // Start elapsed time counter
+            taskStartTime = new Date();
+            if (taskElapsedTimer) clearInterval(taskElapsedTimer);
+            
+            taskElapsedTimer = setInterval(function() {
+                const elapsedMs = new Date() - taskStartTime;
+                const minutes = Math.floor(elapsedMs / 60000);
+                const seconds = Math.floor((elapsedMs % 60000) / 1000);
+                $taskElapsedTime.text(`${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+            }, 1000);
+            
+            let pollingInterval = 2000; // 2 seconds
+            let maxRetries = 60; // Maximum number of retries (2 mins total)
+            let retries = 0;
+            
+            const taskStatusChecker = setInterval(function() {
+                if (retries >= maxRetries) {
+                    clearInterval(taskStatusChecker);
+                    clearInterval(taskElapsedTimer);
+                    $progressStatus.text('Status check timed out. The task may still be processing.');
+                    $progressBar.removeClass('progress-bar-animated');
+                    $progressBar.addClass('bg-warning');
+                    
+                    // Re-enable form controls
+                    $uploadBtn.prop('disabled', false);
+                    $fileInput.prop('disabled', false);
+                    return;
+                }
+                
+                $.ajax({
+                    url: `/api/upload/task_status/?task_id=${taskId}`,
+                    type: 'GET',
+                    success: function(response) {
+                        // Update progress based on task status
+                        if (response.status === 'SUCCESS') {
+                            clearInterval(taskStatusChecker);
+                            clearInterval(taskElapsedTimer);
+                            
+                            // Update progress to completion
+                            $progressBar.css('width', '100%');
+                            $progressBar.text('100%');
+                            $progressBar.removeClass('progress-bar-animated');
+                            $progressBar.addClass('bg-success');
+                            
+                            // Display task result
+                            if (response.result && response.result.total_records) {
+                                $progressStatus.html(`
+                                    <strong>Import completed!</strong><br>
+                                    Processed: ${response.result.total_records} records<br>
+                                    Success: ${response.result.success_count} | 
+                                    Warnings: ${response.result.warning_count} | 
+                                    Failures: ${response.result.failure_count}
+                                `);
+                            } else {
+                                $progressStatus.text('Import completed!');
+                            }
+                            
+                            // Refresh data in tables
+                            loadAnalyticsData();
+                            loadRecentLogs();
+                            loadStatistics();
+                            
+                            // Reset form after delay
+                            setTimeout(function() {
+                                $uploadBtn.prop('disabled', false);
+                                $fileInput.prop('disabled', false);
+                                $fileInput.val('');
+                                $fileInfo.hide();
+                            }, 2000);
+                            
+                            // Hide progress container after a while
+                            setTimeout(function() {
+                                $progressContainer.fadeOut(500);
+                                $progressBar.removeClass('bg-success');
+                                $progressBar.addClass('progress-bar-animated');
+                            }, 5000);
+                        }
+                        else if (response.status === 'FAILURE') {
+                            clearInterval(taskStatusChecker);
+                            clearInterval(taskElapsedTimer);
+                            
+                            $progressBar.removeClass('progress-bar-animated');
+                            $progressBar.addClass('bg-danger');
+                            $progressStatus.text('Task failed: ' + (response.result || 'Unknown error'));
+                            
+                            // Re-enable form
+                            $uploadBtn.prop('disabled', false);
+                            $fileInput.prop('disabled', false);
+                        }
+                        else if (response.status === 'PENDING' || response.status === 'STARTED') {
+                            // Update progress for better UX during waiting time
+                            const progress = Math.min(90, 20 + (retries * 5)); // Progress up to 90%
+                            $progressBar.css('width', progress + '%');
+                            $progressBar.text(Math.round(progress) + '%');
+                            
+                            if (response.status === 'STARTED') {
+                                $progressStatus.text('Task is running...');
+                            } else {
+                                $progressStatus.text('Task is pending...');
+                            }
+                        }
+                        
+                        retries++;
+                    },
+                    error: function() {
+                        retries++;
+                        $progressStatus.text('Error checking task status. Retrying...');
+                    }
+                });
+            }, pollingInterval);
         }
     });
 </script>

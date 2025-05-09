@@ -14,6 +14,9 @@ from core.models import ImportAnalytics, Logs
 from core.serializers import ImportAnalyticsSerializer, LogsSerializer
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+from core.tasks import process_excel_file_task
+from django_celery_results.models import TaskResult
+from rest_framework.decorators import action
 
 
 logger = DatabaseLogger()
@@ -111,40 +114,17 @@ class FileUploadViewSet(viewsets.ViewSet):
             # Convert Excel to CSV
             conversion_start = time.time()
             is_conversion_successful = self.handle_excel_to_csv_conversion(excel_path, csv_path)
-            if is_conversion_successful:
-                # Process the CSV file if conversion was successful
-                processing_result = process_excel_data(csv_path)
-                processing_result['conversion_time'] = f"{time.time() - conversion_start:.2f} seconds"
-            else:
-                processing_result = process_excel_data(excel_path)
+            file_to_process = csv_path if is_conversion_successful else excel_path
 
-            # Check if processing was successful
-            if not processing_result.get('success', False):
-                return Response({
-                    'status': 'error',
-                    'message': 'File uploaded but processing failed',
-                    'error': processing_result.get('error', 'Unknown error')
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # Use Celery to process the file asynchronously
+            task = process_excel_file_task.delay(file_to_process)
 
-            # Return success response with processing results
-            response_data = {
+            return Response({
                 'status': 'success',
-                'message': 'File uploaded and processed successfully',
+                'message': 'File uploaded and processing started',
                 'filename': uploaded_file.name,
-                'processing_results': {
-                    'total_records': processing_result.get('total_records', 0),
-                    'success_count': processing_result.get('success_count', 0),
-                    'warning_count': processing_result.get('warning_count', 0),
-                    'failure_count': processing_result.get('failure_count', 0),
-                    'time_taken': f"{processing_result.get('time_taken', 0):.2f} seconds"
-                }
-            }
-            
-            # Add conversion info if available
-            if 'conversion_time' in processing_result:
-                response_data['processing_results']['conversion_time'] = processing_result['conversion_time']
-
-            return Response(response_data, status=status.HTTP_200_OK)
+                'task_id': task.id,
+            }, status=status.HTTP_202_ACCEPTED)
 
         except Exception as e:
             # Log the error
@@ -157,9 +137,36 @@ class FileUploadViewSet(viewsets.ViewSet):
 
             return Response({
                 'status': 'error',
-                'message': 'An error occurred during file upload or processing',
+                'message': 'An error occurred during file upload',
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'])
+    def task_status(self, request):
+        """Check the status of a background processing task"""
+        task_id = request.query_params.get('task_id')
+        if not task_id:
+            return Response({'error': 'No task_id provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            task_result = TaskResult.objects.get(task_id=task_id)
+            
+            result_data = {}
+            if task_result.status == 'SUCCESS':
+                # Parse the result if the task succeeded
+                import json
+                try:
+                    result_data = json.loads(task_result.result)
+                except json.JSONDecodeError:
+                    result_data = {'raw_result': task_result.result}
+            
+            return Response({
+                'status': task_result.status,
+                'date_done': task_result.date_done,
+                'result': result_data,
+            })
+        except TaskResult.DoesNotExist:
+            return Response({'status': 'PENDING', 'message': 'Task is still queued or running'})
 
 
 class AnalyticsViewSet(viewsets.ViewSet):
@@ -285,4 +292,3 @@ class LogsViewSet(viewsets.ViewSet):
         
         serializer = LogsSerializer(paginated_queryset, many=True)
         return paginator.get_paginated_response(serializer.data)
-    
