@@ -1,7 +1,7 @@
 from django.shortcuts import render
 import os
 from django.conf import settings
-from rest_framework import viewsets, status, filters
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from core.utils import DatabaseLogger
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -9,23 +9,63 @@ import uuid
 from core.processing import process_excel_data
 import pandas as pd
 import time
-from django_filters.rest_framework import DjangoFilterBackend
-from django.utils.dateparse import parse_datetime
-from rest_framework.filters import OrderingFilter
+from rest_framework.pagination import PageNumberPagination
+from core.models import ImportAnalytics, Logs
+from core.serializers import ImportAnalyticsSerializer, LogsSerializer
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
+
 
 logger = DatabaseLogger()
 
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10 
+    page_size_query_param = 'page_size'
+    max_page_size = 100  
+
+
+"""
+Django view for Handling Homepage
+
+"""
 def index(request):
     return render(request, 'home/index.html')
 
+"""
+DRF Viewset for the File Upload and Processing Feature
+
+"""
+
 class FileUploadViewSet(viewsets.ViewSet):
-    """ViewSet for file upload operations"""
+    """
+    ViewSet for handling file uploads and processing
+    
+    """
 
     parser_classes = (MultiPartParser, FormParser)
 
-    def list(self, request):
-        """Return the upload form"""
-        return render(request, 'upload_form.html')
+    def handle_excel_to_csv_conversion(self, excel_path, csv_path):
+        """
+        Convert Excel file to CSV format
+        Params: 
+            excel_path (str): Path to the input Excel file
+            csv_path (str): Path to the output CSV file
+        Returns:
+            bool: True if conversion is successful, False otherwise
+        """
+        try:
+            df = pd.read_excel(excel_path)
+            df.to_csv(csv_path, index=False)
+            return True
+        except Exception as e:
+            logger.log(
+                level="ERROR",
+                message=f"Error converting Excel to CSV: {str(e)}",
+                task_name="excel_to_csv_conversion"
+            )
+            return False
+
+
 
     def create(self, request):
         """Handle file upload"""
@@ -70,31 +110,13 @@ class FileUploadViewSet(viewsets.ViewSet):
             
             # Convert Excel to CSV
             conversion_start = time.time()
-            try:
-                df = pd.read_excel(excel_path)
-                df.to_csv(csv_path, index=False)
-                conversion_time = time.time() - conversion_start
-                
-                # Log conversion success
-                DatabaseLogger.log(
-                    level="INFO",
-                    message=f"Excel file converted to CSV: {csv_filename}",
-                    task_name=f"file_conversion_{unique_id}"
-                )
-            except Exception as e:
-                # If conversion fails, use the original Excel file
-                DatabaseLogger.log(
-                    level="WARNING",
-                    message=f"Failed to convert Excel to CSV: {str(e)}",
-                    task_name=f"file_conversion_{unique_id}",
-                    error=e
-                )
-                # Process the original Excel file instead
-                processing_result = process_excel_data(excel_path)
-            else:
+            is_conversion_successful = self.handle_excel_to_csv_conversion(excel_path, csv_path)
+            if is_conversion_successful:
                 # Process the CSV file if conversion was successful
                 processing_result = process_excel_data(csv_path)
-                processing_result['conversion_time'] = f"{conversion_time:.2f} seconds"
+                processing_result['conversion_time'] = f"{time.time() - conversion_start:.2f} seconds"
+            else:
+                processing_result = process_excel_data(excel_path)
 
             # Check if processing was successful
             if not processing_result.get('success', False):
@@ -140,14 +162,40 @@ class FileUploadViewSet(viewsets.ViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-from core.models import ImportAnalytics, Logs
-from core.serializers import ImportAnalyticsSerializer, LogsSerializer
-
 class AnalyticsViewSet(viewsets.ViewSet):
     """ViewSet for import analytics operations"""
+    pagination_class = StandardResultsSetPagination
 
+
+    @swagger_auto_schema(
+        operation_summary="Get import analytics",
+        manual_parameters=[
+            openapi.Parameter('file_name', openapi.IN_QUERY, description="Filter by file name (partial match)", type=openapi.TYPE_STRING),
+            openapi.Parameter('status', openapi.IN_QUERY, description="Filter by status", type=openapi.TYPE_STRING, enum=["processing", "failed", "completed"]),
+            openapi.Parameter('start_date', openapi.IN_QUERY, description="Filter by start date", type=openapi.TYPE_STRING),
+            openapi.Parameter('end_date', openapi.IN_QUERY, description="Filter by end date", type=openapi.TYPE_STRING),
+            openapi.Parameter('min_success', openapi.IN_QUERY, description="Filter by minimum success count", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('min_failure', openapi.IN_QUERY, description="Filter by minimum failure count", type=openapi.TYPE_INTEGER),
+        ],
+        operation_description="Retrieve import analytics with optional filtering and pagination",
+        responses={
+            200: ImportAnalyticsSerializer(many=True),
+            400: "Bad Request",
+            404: "Not Found"
+        }
+    )
     def list(self, request):
-        """Return the import analytics with filtering options"""
+        """
+        Return the import analytics with filtering options
+        Parameters:
+            - file_name: Filter by file name (partial match)
+            - status: Filter by status (processing, completed, failed)
+            - start_date: Filter by start date
+            - end_date: Filter by end date
+            - min_success: Filter by minimum success count
+            - min_failure: Filter by minimum failure count
+        
+        """
         queryset = ImportAnalytics.objects.all()
         
         # Filter by file name (partial match)
@@ -177,32 +225,45 @@ class AnalyticsViewSet(viewsets.ViewSet):
         if min_failure and min_failure.isdigit():
             queryset = queryset.filter(failure_count__gte=int(min_failure))
             
-        # Ordering
-        order_by = request.query_params.get('order_by', '-created_at')
-        queryset = queryset.order_by(order_by)
         
-        serializer = ImportAnalyticsSerializer(queryset, many=True)
-        return Response(serializer.data)
+        # Apply pagination
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
+        
+        serializer = ImportAnalyticsSerializer(paginated_queryset, many=True)
+        return paginator.get_paginated_response(serializer.data)
     
-    def retrieve(self, request, pk=None):
-        """Get a specific analytics record by ID"""
-        try:
-            analytics = ImportAnalytics.objects.get(pk=pk)
-            serializer = ImportAnalyticsSerializer(analytics)
-            return Response(serializer.data)
-        except ImportAnalytics.DoesNotExist:
-            return Response(
-                {"error": "Analytics record not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )
 
 class LogsViewSet(viewsets.ViewSet):
     """ViewSet for logs operations"""
+    pagination_class = StandardResultsSetPagination
 
+
+    @swagger_auto_schema(
+        operation_summary="Get logs",
+        manual_parameters=[
+            openapi.Parameter('level', openapi.IN_QUERY, description="Filter by log level", type=openapi.TYPE_STRING, enum=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+            openapi.Parameter('task_name', openapi.IN_QUERY, description="Filter by task name (partial match)", type=openapi.TYPE_STRING),
+            openapi.Parameter('message', openapi.IN_QUERY, description="Filter by message content (partial match)", type=openapi.TYPE_STRING),
+            openapi.Parameter('created_at', openapi.IN_QUERY, description="Filter by creation date", type=openapi.TYPE_STRING),
+        ],
+        operation_description="Retrieve logs with optional filtering and pagination",
+        responses={
+            200: LogsSerializer(many=True),
+            400: "Bad Request",
+            404: "Not Found"
+        }
+    )
     def list(self, request):
         """Return the logs with filtering options"""
         queryset = Logs.objects.all()
         
+
+        # Filter by creation date
+        created_at = request.query_params.get('created_at', None)
+        if created_at:
+            queryset = queryset.filter(created_at__date=created_at)
+
         # Filter by log level
         level = request.query_params.get('level', None)
         if level:
@@ -218,34 +279,10 @@ class LogsViewSet(viewsets.ViewSet):
         if message:
             queryset = queryset.filter(message__icontains=message)
             
-        # Filter by error presence
-        has_error = request.query_params.get('has_error', None)
-        if has_error and has_error.lower() == 'true':
-            queryset = queryset.exclude(traceback__isnull=True).exclude(traceback='')
+        # Apply pagination
+        paginator = self.pagination_class()
+        paginated_queryset = paginator.paginate_queryset(queryset, request)
         
-        # Pagination
-        page = request.query_params.get('page', 1)
-        page_size = request.query_params.get('page_size', 100)
-        try:
-            page = int(page)
-            page_size = min(int(page_size), 100)  # Limit max page size
-            start = (page - 1) * page_size
-            end = page * page_size
-            queryset = queryset.order_by('-id')[start:end]
-        except ValueError:
-            queryset = queryset.order_by('-id')[:100]
-        
-        serializer = LogsSerializer(queryset, many=True)
-        return Response(serializer.data)
+        serializer = LogsSerializer(paginated_queryset, many=True)
+        return paginator.get_paginated_response(serializer.data)
     
-    def retrieve(self, request, pk=None):
-        """Get a specific log record by ID"""
-        try:
-            log = Logs.objects.get(pk=pk)
-            serializer = LogsSerializer(log)
-            return Response(serializer.data)
-        except Logs.DoesNotExist:
-            return Response(
-                {"error": "Log record not found"}, 
-                status=status.HTTP_404_NOT_FOUND
-            )

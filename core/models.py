@@ -86,6 +86,12 @@ class Product(models.Model):
         
 
 class ImportAnalytics(models.Model):
+    STATUS_CHOICES = [
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+
     file_name = models.CharField(max_length=255)
     start_time = models.DateTimeField()
     end_time = models.DateTimeField(null=True, blank=True)
@@ -93,8 +99,8 @@ class ImportAnalytics(models.Model):
     success_count = models.IntegerField(default=0)
     warning_count = models.IntegerField(default=0)
     failure_count = models.IntegerField(default=0)
-    time_taken = models.FloatField(null=True, blank=True)  # in seconds
-    status = models.CharField(max_length=20)  # processing, completed, failed
+    time_taken = models.FloatField(null=True, blank=True)  
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='processing')
 
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -10,6 +10,8 @@ djangorestframework==3.16.0
 drf-yasg==1.21.10
 et_xmlfile==2.0.0
 executing==2.2.0
+Faker==37.1.0
+gunicorn==23.0.0
 inflection==0.5.1
 ipykernel==6.29.5
 ipython==9.2.0
@@ -28,6 +30,7 @@ pexpect==4.9.0
 platformdirs==4.3.7
 prompt_toolkit==3.0.51
 psutil==7.0.0
+psycopg2-binary==2.9.10
 ptyprocess==0.7.0
 pure_eval==0.2.3
 pydantic==2.11.4
@@ -48,3 +51,4 @@ tzdata==2025.2
 uritemplate==4.1.1
 wcwidth==0.2.13
 whitenoise==6.9.0
+xlrd==2.0.1

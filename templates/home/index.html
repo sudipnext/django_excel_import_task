@@ -237,12 +237,10 @@
             <button id="refreshLogsBtn" class="btn btn-outline-secondary btn-sm me-2">
                 <i class="fas fa-sync-alt"></i> Refresh
             </button>
-            <a href="/api/analytics/" class="btn btn-outline-primary btn-sm">View All Analytics</a>
-            <a href="/api/logs/" class="btn btn-outline-info btn-sm ms-2">View All Logs</a>
         </div>
     </div>
 
-    <!-- Simple filtering options -->
+    <!-- Enhanced filtering options -->
     <div class="analytics-filters">
         <div class="row g-3">
             <div class="col-md-3">
@@ -256,7 +254,13 @@
             <div class="col-md-4">
                 <input type="text" class="form-control form-control-sm" id="filenameFilter" placeholder="Filter by filename">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <input type="date" class="form-control form-control-sm" id="startDateFilter" placeholder="Start Date">
+            </div>
+            <div class="col-md-2">
+                <input type="date" class="form-control form-control-sm" id="endDateFilter" placeholder="End Date">
+            </div>
+            <div class="col-md-12 mt-2">
                 <button class="btn btn-sm btn-outline-primary" id="applyFiltersBtn">Apply Filters</button>
                 <button class="btn btn-sm btn-outline-secondary" id="clearFiltersBtn">Clear</button>
             </div>
@@ -278,12 +282,11 @@
                     <th>Warnings</th>
                     <th>Failures</th>
                     <th>Status</th>
-                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td colspan="9" class="text-center">
+                    <td colspan="8" class="text-center">
                         Loading import logs...
                     </td>
                 </tr>
@@ -298,6 +301,30 @@
 
     <div class="mt-4">
         <h4>Recent System Logs</h4>
+        <div class="logs-filters mb-3">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <select class="form-select form-select-sm" id="logLevelFilter">
+                        <option value="">All Levels</option>
+                        <option value="DEBUG">DEBUG</option>
+                        <option value="INFO">INFO</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="CRITICAL">CRITICAL</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control form-control-sm" id="taskNameFilter" placeholder="Filter by task name">
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control form-control-sm" id="messageFilter" placeholder="Filter by message">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-sm btn-outline-primary" id="applyLogFiltersBtn">Apply</button>
+                    <button class="btn btn-sm btn-outline-secondary" id="clearLogFiltersBtn">Clear</button>
+                </div>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm" id="logsTable">
                 <thead>
@@ -314,8 +341,10 @@
                     </tr>
                 </tbody>
             </table>
-            <div class="text-center">
-                <a href="/api/logs/" class="btn btn-sm btn-outline-secondary">View All Logs</a>
+            <div id="logsPagination" class="d-flex justify-content-center mt-3">
+                <button class="btn btn-sm btn-outline-secondary me-2" id="prevLogsPage" disabled>Previous</button>
+                <span class="align-self-center me-2" id="logsPageInfo">Page 1</span>
+                <button class="btn btn-sm btn-outline-secondary" id="nextLogsPage">Next</button>
             </div>
         </div>
     </div>
@@ -339,6 +368,8 @@
         // Pagination variables
         let currentPage = 1;
         let totalPages = 1;
+        let logsCurrentPage = 1;
+        let logsTotalPages = 1;
         
         // Load initial data
         loadAnalyticsData();
@@ -462,15 +493,33 @@
             });
         });
         
-        // Event handlers for table filters
+        // Event handlers for analytics table filters
         $('#applyFiltersBtn').on('click', function() {
+            currentPage = 1; // Reset to first page when applying filters
             loadAnalyticsData();
         });
         
         $('#clearFiltersBtn').on('click', function() {
             $('#statusFilter').val('');
             $('#filenameFilter').val('');
+            $('#startDateFilter').val('');
+            $('#endDateFilter').val('');
+            currentPage = 1; // Reset to first page when clearing filters
             loadAnalyticsData();
+        });
+        
+        // Event handlers for logs table filters
+        $('#applyLogFiltersBtn').on('click', function() {
+            logsCurrentPage = 1; // Reset to first page when applying filters
+            loadRecentLogs();
+        });
+        
+        $('#clearLogFiltersBtn').on('click', function() {
+            $('#logLevelFilter').val('');
+            $('#taskNameFilter').val('');
+            $('#messageFilter').val('');
+            logsCurrentPage = 1; // Reset to first page when clearing filters
+            loadRecentLogs();
         });
         
         $('#refreshLogsBtn').on('click', function() {
@@ -479,7 +528,7 @@
             loadStatistics();
         });
         
-        // Pagination handlers
+        // Analytics pagination handlers
         $('#prevPage').on('click', function() {
             if (currentPage > 1) {
                 currentPage--;
@@ -493,8 +542,23 @@
                 loadAnalyticsData();
             }
         });
+        
+        // Logs pagination handlers
+        $('#prevLogsPage').on('click', function() {
+            if (logsCurrentPage > 1) {
+                logsCurrentPage--;
+                loadRecentLogs();
+            }
+        });
+        
+        $('#nextLogsPage').on('click', function() {
+            if (logsCurrentPage < logsTotalPages) {
+                logsCurrentPage++;
+                loadRecentLogs();
+            }
+        });
 
-        // Function to load analytics data from API
+        // Function to load analytics data from API with filters
         function loadAnalyticsData() {
             let params = {};
             
@@ -509,11 +573,21 @@
                 params.file_name = filenameFilter;
             }
             
+            const startDateFilter = $('#startDateFilter').val();
+            if (startDateFilter) {
+                params.start_date = startDateFilter;
+            }
+            
+            const endDateFilter = $('#endDateFilter').val();
+            if (endDateFilter) {
+                params.end_date = endDateFilter;
+            }
+            
             // Add page number
             params.page = currentPage;
             
             // Show loading indicator
-            $('#importsTable tbody').html('<tr><td colspan="9" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading data...</td></tr>');
+            $('#importsTable tbody').html('<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading data...</td></tr>');
             
             // Display active filters
             updateActiveFilters();
@@ -524,29 +598,54 @@
                 data: params,
                 success: function(data) {
                     // Update table with analytics data
-                    updateAnalyticsTable(data);
+                    updateAnalyticsTable(data.results);
                     
                     // Update pagination
-                    totalPages = Math.ceil(data.length > 0 ? data.length / 10 : 1); // Assuming 10 items per page
+                    totalPages = Math.ceil(data.count / 10); // Using standard pagination size of 10
                     updatePagination();
                 },
                 error: function() {
-                    $('#importsTable tbody').html('<tr><td colspan="9" class="text-center text-danger">Error loading data. Please try again.</td></tr>');
+                    $('#importsTable tbody').html('<tr><td colspan="8" class="text-center text-danger">Error loading data. Please try again.</td></tr>');
                 }
             });
         }
         
-        // Function to load recent logs
+        // Function to load logs with filters
         function loadRecentLogs() {
+            let params = {
+                page: logsCurrentPage,
+                page_size: 10
+            };
+            
+            // Add filters if set
+            const logLevelFilter = $('#logLevelFilter').val();
+            if (logLevelFilter) {
+                params.level = logLevelFilter;
+            }
+            
+            const taskNameFilter = $('#taskNameFilter').val();
+            if (taskNameFilter) {
+                params.task_name = taskNameFilter;
+            }
+            
+            const messageFilter = $('#messageFilter').val();
+            if (messageFilter) {
+                params.message = messageFilter;
+            }
+            
+            // Show loading indicator
+            $('#logsTable tbody').html('<tr><td colspan="4" class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Loading logs...</td></tr>');
+            
             $.ajax({
                 url: '/api/logs/',
                 type: 'GET',
-                data: {
-                    page: 1,
-                    page_size: 5  // Only fetch 5 most recent logs
-                },
+                data: params,
                 success: function(data) {
-                    updateLogsTable(data);
+                    updateLogsTable(data.results);
+                    
+                    // Update pagination
+                    logsTotalPages = Math.ceil(data.count / 10);
+                    updateLogsPagination();
                 },
                 error: function() {
                     $('#logsTable tbody').html('<tr><td colspan="4" class="text-center text-danger">Error loading logs</td></tr>');
@@ -561,16 +660,19 @@
                 type: 'GET',
                 success: function(data) {
                     // Calculate statistics from analytics data
-                    let totalImports = data.length;
+                    let totalImports = data.count || 0;
                     let successfulRows = 0;
                     let warningCount = 0;
                     let failedRows = 0;
                     
-                    data.forEach(function(item) {
-                        successfulRows += item.success_count || 0;
-                        warningCount += item.warning_count || 0;
-                        failedRows += item.failure_count || 0;
-                    });
+                    // Process results to calculate totals
+                    if (data.results && data.results.length > 0) {
+                        data.results.forEach(function(item) {
+                            successfulRows += item.success_count || 0;
+                            warningCount += item.warning_count || 0;
+                            failedRows += item.failure_count || 0;
+                        });
+                    }
                     
                     // Update statistics on page
                     $('#totalImports').text(totalImports);
@@ -585,8 +687,8 @@
         function updateAnalyticsTable(data) {
             let tableHtml = '';
             
-            if (data.length === 0) {
-                tableHtml = '<tr><td colspan="9" class="text-center">No import logs found. Upload an Excel file to get started.</td></tr>';
+            if (!data || data.length === 0) {
+                tableHtml = '<tr><td colspan="8" class="text-center">No import logs found. Upload an Excel file to get started.</td></tr>';
             } else {
                 data.forEach(function(item) {
                     let statusBadge = '';
@@ -612,26 +714,19 @@
                         <td>${item.warning_count}</td>
                         <td>${item.failure_count}</td>
                         <td>${statusBadge}</td>
-                        <td>
-                            <a href="/api/analytics/${item.id}/" class="btn btn-sm btn-outline-info" data-bs-toggle="tooltip" title="View Details">
-                                <i class="fas fa-eye"></i>
-                            </a>
-                        </td>
                     </tr>
                     `;
                 });
             }
             
             $('#importsTable tbody').html(tableHtml);
-            // Reinitialize tooltips
-            $('[data-bs-toggle="tooltip"]').tooltip();
         }
         
         // Function to update the logs table
         function updateLogsTable(data) {
             let tableHtml = '';
             
-            if (data.length === 0) {
+            if (!data || data.length === 0) {
                 tableHtml = '<tr><td colspan="4" class="text-center">No logs found.</td></tr>';
             } else {
                 data.forEach(function(log) {
@@ -648,6 +743,9 @@
                             break;
                         case 'DEBUG':
                             levelBadge = '<span class="badge bg-secondary">DEBUG</span>';
+                            break;
+                        case 'CRITICAL':
+                            levelBadge = '<span class="badge bg-dark">CRITICAL</span>';
                             break;
                         default:
                             levelBadge = `<span class="badge bg-primary">${log.level}</span>`;
@@ -667,11 +765,18 @@
             $('#logsTable tbody').html(tableHtml);
         }
         
-        // Function to update pagination controls
+        // Function to update analytics pagination controls
         function updatePagination() {
-            $('#pageInfo').text(`Page ${currentPage} of ${totalPages}`);
+            $('#pageInfo').text(`Page ${currentPage} of ${totalPages || 1}`);
             $('#prevPage').prop('disabled', currentPage <= 1);
-            $('#nextPage').prop('disabled', currentPage >= totalPages);
+            $('#nextPage').prop('disabled', currentPage >= totalPages || totalPages === 0);
+        }
+        
+        // Function to update logs pagination controls
+        function updateLogsPagination() {
+            $('#logsPageInfo').text(`Page ${logsCurrentPage} of ${logsTotalPages || 1}`);
+            $('#prevLogsPage').prop('disabled', logsCurrentPage <= 1);
+            $('#nextLogsPage').prop('disabled', logsCurrentPage >= logsTotalPages || logsTotalPages === 0);
         }
         
         // Function to update active filters display
@@ -680,6 +785,8 @@
             
             const statusFilter = $('#statusFilter').val();
             const filenameFilter = $('#filenameFilter').val();
+            const startDateFilter = $('#startDateFilter').val();
+            const endDateFilter = $('#endDateFilter').val();
             
             if (statusFilter) {
                 filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="status">Status: ${statusFilter} <i class="fas fa-times"></i></span>`;
@@ -689,7 +796,15 @@
                 filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="filename">Filename: ${filenameFilter} <i class="fas fa-times"></i></span>`;
             }
             
-            $('#activeFilters').html(filtersHtml);
+            if (startDateFilter) {
+                filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="startDate">From: ${startDateFilter} <i class="fas fa-times"></i></span>`;
+            }
+            
+            if (endDateFilter) {
+                filtersHtml += `<span class="badge bg-secondary filter-badge" data-filter="endDate">To: ${endDateFilter} <i class="fas fa-times"></i></span>`;
+            }
+            
+            $('#activeFilters').html(filtersHtml || '<span class="text-muted">No active filters</span>');
             
             // Add click handler to remove filters
             $('.filter-badge').on('click', function() {
@@ -698,6 +813,10 @@
                     $('#statusFilter').val('');
                 } else if (filter === 'filename') {
                     $('#filenameFilter').val('');
+                } else if (filter === 'startDate') {
+                    $('#startDateFilter').val('');
+                } else if (filter === 'endDate') {
+                    $('#endDateFilter').val('');
                 }
                 loadAnalyticsData();
             });
@@ -718,9 +837,6 @@
             }
             return cookieValue;
         }
-
-        // Initialize tooltips for the action buttons
-        $('[data-bs-toggle="tooltip"]').tooltip();
     });
 </script>
 {% endblock %}
