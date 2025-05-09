@@ -196,7 +196,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
             - min_failure: Filter by minimum failure count
         
         """
-        queryset = ImportAnalytics.objects.all()
+        queryset = ImportAnalytics.objects.all().order_by('-created_at')
         
         # Filter by file name (partial match)
         file_name = request.query_params.get('file_name', None)
@@ -256,7 +256,7 @@ class LogsViewSet(viewsets.ViewSet):
     )
     def list(self, request):
         """Return the logs with filtering options"""
-        queryset = Logs.objects.all()
+        queryset = Logs.objects.all().order_by('-created_at')
         
 
         # Filter by creation date
