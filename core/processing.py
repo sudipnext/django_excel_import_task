@@ -493,7 +493,7 @@ def process_excel_data(file_path):
         elif total_records > 0 and success_count == 0:
             import_analytics.status = "failed"
         else:
-            import_analytics.status = "completed_with_errors"
+            import_analytics.status = "completed"
             
         import_analytics.save()
 
